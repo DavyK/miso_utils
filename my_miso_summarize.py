@@ -54,10 +54,10 @@ class misoIsoform():
             self.mRNA_end = mRNA_end
             self.sampleData = {}
         
-        def addSampleData(self,sampleName, miso_posterior_mean, miso_stdev, ci_low, ci_high,assigned_reads):
+        def addSampleData(self,sampleName, miso_posterior_mean, miso_stdev, miso_log2_mean, miso_log2_stddev, ci_low, ci_high,assigned_reads):
             samplesAlreadySeen = set(self.sampleData.keys())
             if sampleName not in samplesAlreadySeen:
-                self.sampleData[sampleName] = {'mean':miso_posterior_mean, 'ci_low':ci_low, 'ci_high':ci_high, 'sd': miso_stdev, 'assigned_reads':assigned_reads}
+                self.sampleData[sampleName] = {'mean':miso_posterior_mean, 'ci_low':ci_low, 'ci_high':ci_high, 'sd': miso_stdev,'meanLog2': miso_log2_mean, 'sdLog2': miso_log2_stddev, 'assigned_reads':assigned_reads}
             else:
                 sys.stderr.write("Sample {0} data was seen twice for isoform {1} in genes {2}. Something's wrong here!".format(sampleName, self.isoformID, self.event_name))
 
@@ -207,7 +207,7 @@ def summarizeGeneMisoFiles_worker(args):
         bundling up the gene and isoform results for passing back to the result list. Probably not the optimal way of doing this.
         '''
         geneSummary[geneName] = {'geneName':geneName, 'chrom':chrom, 'strand':strand, 'start':most_start, 'end':most_end, 'sampleName':sampleName, 'reads':totalAssignedReads}
-        isoformSummary[geneName] = (transcriptIDs, isoforms, geneName, chrom, strand, mRNA_starts, mRNA_ends, sampleName, miso_means, miso_sds, miso_ci_high, miso_ci_low, assigned_counts_reads)
+        isoformSummary[geneName] = (transcriptIDs, isoforms, geneName, chrom, strand, mRNA_starts, mRNA_ends, sampleName, miso_means, miso_sds, miso_mean_log2, miso_sds_log2, miso_ci_high, miso_ci_low, assigned_counts_reads)
         
     
     res = (sampleName, geneSummary, isoformSummary)  
@@ -224,12 +224,12 @@ def combineMappedResults(result_List):
                                ).addSampleData(data['sampleName'], data['reads'])
 
             transcriptIDs, isoforms, geneName, chrom, strand, mRNA_starts, mRNA_ends, \
-                sampleName, miso_means, miso_sds, miso_ci_high, miso_ci_low, assigned_counts_reads = isoformSummary[gene]
+                sampleName, miso_means, miso_sds, miso_mean_log2, miso_sds_log2, miso_ci_high, miso_ci_low, assigned_counts_reads = isoformSummary[gene]
                  
             for i, iso in enumerate(isoforms):
                 thisEventName = '{0}|{1}'.format(geneName, iso)
                 sampleIsoformSummary.setdefault(thisEventName, misoIsoform(geneName, transcriptIDs[i], iso, chrom, strand, mRNA_starts[i], mRNA_ends[i])\
-                                          ).addSampleData(sampleName, miso_means[i], miso_sds[i], miso_ci_low[i], miso_ci_high[i], assigned_counts_reads[i])
+                                          ).addSampleData(sampleName, miso_means[i], miso_sds[i],miso_mean_log2[i], miso_sds_log2[i], miso_ci_low[i], miso_ci_high[i], assigned_counts_reads[i])
                                           
     return (sampleGeneSummary, sampleIsoformSummary)
                                           
@@ -238,11 +238,15 @@ def outputMatrix(filePrefix, isoObj, sampleList, dataType):
     Output different matrix
     '''
     if dataType == 'mean':
-        filePostFix = '_meanPsiMatrix.txt'
+        filePostFix = '_meanPsiMatrix.tsv'
     if dataType == 'sd':
-        filePostFix = '_standardDevMatrix.txt'
+        filePostFix = '_standardDevMatrix.tsv'
+    if dataType == 'sdLog2':
+        filePostFix = '_standardDevLog2Matrix.tsv'
+    if dataType == 'meanLog2':
+        filePostFix = '_meanLog2PsiMatrix.tsv' 
     if dataType == 'assigned_reads':
-        filePostFix = '_assignedReadsMatrix.txt'
+        filePostFix = '_assignedReadsMatrix.tsv'
     
     outputFileName = filePrefix + filePostFix
     sys.stdout.write('writing {1} matrix to file {0}\n'.format(outputFileName, dataType))
@@ -366,6 +370,8 @@ def main():
      
     outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'mean')
     outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'sd')
+    outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'sdLog2')
+    outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'meanLog2')
     outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'assigned_reads')
     
     outputGeneCountsMatrix(outputFilePrefix, sampleGeneSummary, sampleList)

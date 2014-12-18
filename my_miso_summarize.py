@@ -192,8 +192,14 @@ def summarizeGeneMisoFiles_worker(args):
         miso_sds = np.std(psis, axis=0)
         miso_ci_low = np.percentile(psis, axis=0, q=2.5)
         miso_ci_high = np.percentile(psis, axis=0, q=97.5)
-        miso_mean_log2 = np.mean(np.log2(psis, axis=0), axis=0)
-        miso_sds_log2 = np.std(np.log2(psis, axis=0), axis=0)
+        log2_Psis = np.log2(psis)
+        miso_mean_log2 = np.mean(log2_Psis, axis=0)
+        '''
+        using masked array here to account for the fact that some means are 0, and the log2 of 0 is -Inf, 
+        and calculating std for arrays with -Inf throws an error.
+        '''
+        masked_log2_Psis = np.ma.array(log2_Psis, mask=np.isinf(log2_Psis))
+        miso_sds_log2 = np.std(masked_log2_Psis, axis=0)
         
         totalAssignedReads = sum([int(i) for i in assigned_counts_reads])
               
@@ -374,11 +380,8 @@ def main():
     outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'meanLog2')
     outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'assigned_reads')
     
-    outputGeneCountsMatrix(outputFilePrefix, sampleGeneSummary, sampleList)
-    
+    outputGeneCountsMatrix(outputFilePrefix, sampleGeneSummary, sampleList)    
     outputIsoformMetaInfo(outputFilePrefix, sampleIsoformSummary)
-    
-    
 
 
 if __name__ == '__main__':

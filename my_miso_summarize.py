@@ -192,6 +192,8 @@ def summarizeGeneMisoFiles_worker(args):
         miso_sds = np.std(psis, axis=0)
         miso_ci_low = np.percentile(psis, axis=0, q=2.5)
         miso_ci_high = np.percentile(psis, axis=0, q=97.5)
+        miso_mean_log2 = np.mean(np.log2(psis, axis=0), axis=0)
+        miso_sds_log2 = np.std(np.log2(psis, axis=0), axis=0)
         
         totalAssignedReads = sum([int(i) for i in assigned_counts_reads])
               

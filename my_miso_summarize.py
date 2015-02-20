@@ -54,10 +54,12 @@ class misoIsoform():
             self.mRNA_end = mRNA_end
             self.sampleData = {}
         
-        def addSampleData(self,sampleName, miso_posterior_mean, miso_stdev, miso_log2_mean, miso_log2_stddev, ci_low, ci_high,assigned_reads):
+        def addSampleData(self,sampleName, miso_posterior_mean, miso_stdev, miso_log2_mean, miso_log2_stddev, ci_low, ci_high,assigned_reads,unique_read_counts, overlapping_read_counts):
             samplesAlreadySeen = set(self.sampleData.keys())
             if sampleName not in samplesAlreadySeen:
-                self.sampleData[sampleName] = {'mean':miso_posterior_mean, 'ci_low':ci_low, 'ci_high':ci_high, 'sd': miso_stdev,'meanLog2': miso_log2_mean, 'sdLog2': miso_log2_stddev, 'assigned_reads':assigned_reads}
+                self.sampleData[sampleName] = {'mean':miso_posterior_mean, 'ci_low':ci_low, 'ci_high':ci_high, 
+                                               'sd': miso_stdev,'meanLog2': miso_log2_mean, 'sdLog2': miso_log2_stddev, 
+                                               'assigned_reads':assigned_reads, unique_read_counts:'unique_read_counts', overlapping_read_counts:'overlapping_read_counts'}
             else:
                 sys.stderr.write("Sample {0} data was seen twice for isoform {1} in genes {2}. Something's wrong here!".format(sampleName, self.isoformID, self.event_name))
 
@@ -89,6 +91,27 @@ def findMisoFiles(inputDir):
     sys.stdout.write('Found {0} miso files for {1} samples\n'.format(len(files),len(sample_gene_miso_files)))
 
     return sample_gene_miso_files
+
+def parse_counts_string(n, counts_string):
+        uniqueReads = [0]*n
+        overlappingReads = [0]*n
+        
+        isoform_strings = counts_string[1:].rsplit(',(')
+        
+        for iso in isoform_strings:
+            isoConf, nReads = iso.rsplit(':')
+            nReads = int(nReads)
+            isoformIdxs = [int(i) for i in isoConf[:-1].rsplit(',')]
+            
+            if sum(isoformIdxs) == 1:
+                #only 1 isoform case
+                uniqueReads[isoformIdxs.index(1)] += nReads
+            else:
+                for i,idx in enumerate(isoformIdxs):
+                    if idx > 0:
+                        overlappingReads[i] += nReads
+        return uniqueReads, overlappingReads
+
 
 def parse_miso_line(line):
     
@@ -134,20 +157,15 @@ def parse_miso_line(line):
     '''
     #print '#isoforms: {0}\t #assigned counts:{1}\t {2}'.format(len(isoforms), len(assigned_counts), assigned_counts)
     
-    '''
-    Not using the counts anymore
-    '''
-    #captures the (0,0) of (0,0):100
-    #counts_id = [i.rsplit(':')[0] for i in counts]
-    #captures the 100 of (0,0):100
-    #counts_reads = [i.rsplit(':')[1] for i in counts]
+    unique_read_counts, overlapping_read_counts = parse_counts_string(len(transcriptIDs), strFields['counts'])
     
     #captures the 1 of 1:0
     #assigned_counts_index = [int(i.rsplit(':')[0]) for i in assigned_counts] #wasn't using this anywhere
     #captures the 0 of 1:0
     assigned_counts_reads = [int(i.rsplit(':')[1]) for i in assigned_counts]
     
-    parsed_line = (transcriptIDs, isoforms, assigned_counts_reads,
+    parsed_line = (transcriptIDs, isoforms, 
+                   assigned_counts_reads, unique_read_counts, overlapping_read_counts,
                    chrom, strand, mRNA_starts, mRNA_ends )
     
     return parsed_line
@@ -172,7 +190,8 @@ def summarizeGeneMisoFiles_worker(args):
         
         misoFile = open(filename, 'r')
         
-        transcriptIDs, isoforms, assigned_counts_reads, \
+        transcriptIDs, isoforms,\
+        assigned_counts_reads, unique_read_counts, overlapping_read_counts, \
         chrom, strand, mRNA_starts, mRNA_ends = parse_miso_line(misoFile.next())
         
         misoFile.next() #skip the next line it's just "sampled_psi\tlog.score"
@@ -213,7 +232,7 @@ def summarizeGeneMisoFiles_worker(args):
         bundling up the gene and isoform results for passing back to the result list. Probably not the optimal way of doing this.
         '''
         geneSummary[geneName] = {'geneName':geneName, 'chrom':chrom, 'strand':strand, 'start':most_start, 'end':most_end, 'sampleName':sampleName, 'reads':totalAssignedReads}
-        isoformSummary[geneName] = (transcriptIDs, isoforms, geneName, chrom, strand, mRNA_starts, mRNA_ends, sampleName, miso_means, miso_sds, miso_mean_log2, miso_sds_log2, miso_ci_high, miso_ci_low, assigned_counts_reads)
+        isoformSummary[geneName] = (transcriptIDs, isoforms, geneName, chrom, strand, mRNA_starts, mRNA_ends, sampleName, miso_means, miso_sds, miso_mean_log2, miso_sds_log2, miso_ci_high, miso_ci_low, assigned_counts_reads,unique_read_counts, overlapping_read_counts)
         
     
     res = (sampleName, geneSummary, isoformSummary)  
@@ -230,12 +249,12 @@ def combineMappedResults(result_List):
                                ).addSampleData(data['sampleName'], data['reads'])
 
             transcriptIDs, isoforms, geneName, chrom, strand, mRNA_starts, mRNA_ends, \
-                sampleName, miso_means, miso_sds, miso_mean_log2, miso_sds_log2, miso_ci_high, miso_ci_low, assigned_counts_reads = isoformSummary[gene]
+                sampleName, miso_means, miso_sds, miso_mean_log2, miso_sds_log2, miso_ci_high, miso_ci_low, assigned_counts_reads, unique_read_counts, overlapping_read_counts = isoformSummary[gene]
                  
             for i, iso in enumerate(isoforms):
                 thisEventName = '{0}|{1}'.format(geneName, iso)
                 sampleIsoformSummary.setdefault(thisEventName, misoIsoform(geneName, transcriptIDs[i], iso, chrom, strand, mRNA_starts[i], mRNA_ends[i])\
-                                          ).addSampleData(sampleName, miso_means[i], miso_sds[i],miso_mean_log2[i], miso_sds_log2[i], miso_ci_low[i], miso_ci_high[i], assigned_counts_reads[i])
+                                          ).addSampleData(sampleName, miso_means[i], miso_sds[i],miso_mean_log2[i], miso_sds_log2[i], miso_ci_low[i], miso_ci_high[i], assigned_counts_reads[i], unique_read_counts[i], overlapping_read_counts[i])
                                           
     return (sampleGeneSummary, sampleIsoformSummary)
                                           

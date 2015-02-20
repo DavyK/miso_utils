@@ -272,6 +272,10 @@ def outputMatrix(filePrefix, isoObj, sampleList, dataType):
         filePostFix = '_meanLog2PsiMatrix.tsv' 
     if dataType == 'assigned_reads':
         filePostFix = '_assignedReadsMatrix.tsv'
+    if dataType == 'unique_read_counts':
+        filePostFix = '_uniqueReadsMatrix.tsv'
+    if dataType == 'overlapping_read_counts':
+        filePostFix = '_overlappingReadsMatrix.tsv'
     
     outputFileName = filePrefix + filePostFix
     sys.stdout.write('writing {1} matrix to file {0}\n'.format(outputFileName, dataType))
@@ -398,6 +402,8 @@ def main():
     outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'sdLog2')
     outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'meanLog2')
     outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'assigned_reads')
+    outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'unique_read_counts')
+    outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'overlapping_read_counts')
     
     outputGeneCountsMatrix(outputFilePrefix, sampleGeneSummary, sampleList)    
     outputIsoformMetaInfo(outputFilePrefix, sampleIsoformSummary)

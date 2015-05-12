@@ -370,7 +370,7 @@ def main():
         nCpus = 6
     
     try:
-        level = sys.argv[3]
+        level = sys.argv[4]
     except ValueError:
         sys.stderr.write('No event level provided - assuming isoforms')
         level = 'isoforms'

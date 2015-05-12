@@ -18,6 +18,8 @@ import multiprocessing as mp
 import numpy as np
 
 
+EVENT_LEVEL = ''
+
 sampleGeneSummary = {}
 sampleIsoformSummary = {}
 
@@ -133,7 +135,10 @@ def parse_miso_line(line):
     Isoforms are of the form :
     'exon:ENST00000410086:1_exon:ENST00000410086:2_exon:ENST00000410086:3_exon:ENST00000410086:4_exon:ENST00000410086:5'
     '''
-    transcriptIDs = [i.rsplit(':')[1] for i in isoforms] 
+    if EVENT_LEVEL == 'isoforms':
+        transcriptIDs = [i.rsplit(':')[1] for i in isoforms]
+    else:
+        transcriptIDs = isoforms 
     '''
     #assuming that the transcript IDs are always the same across of the length of the isoforms (maybe not for novel stuff), 
     and that each TxID is unique for each isoform
@@ -277,7 +282,7 @@ def outputMatrix(filePrefix, isoObj, sampleList, dataType):
     if dataType == 'unique_read_counts':
         filePostFix = '_uniqueReadsMatrix.tsv'
     if dataType == 'overlapping_read_counts':
-        filePostFix = '_overlappingReadsMatrix.tsv'
+        filePostFix = '_nonUniqueReadsMatrix.tsv'
     
     outputFileName = filePrefix + filePostFix
     sys.stdout.write('writing {1} matrix to file {0}\n'.format(outputFileName, dataType))
@@ -363,6 +368,17 @@ def main():
     except ValueError:
         sys.stderr.write('nCPUs must be an integer - assuming 6 (4 workers, 1 listener, 1 main)')
         nCpus = 6
+    
+    try:
+        level = sys.argv[3]
+    except ValueError:
+        sys.stderr.write('No event level provided - assuming isoforms')
+        level = 'isoforms'
+    if level != 'isoforms':
+        level = 'exons'
+    global EVENT_LEVEL
+    EVENT_LEVEL = level
+    
         
     sample_gene_miso_files = findMisoFiles(inputDir)
     sampleList = sample_gene_miso_files.keys()

@@ -59,7 +59,7 @@ class misoIsoform():
             if sampleName not in samplesAlreadySeen:
                 self.sampleData[sampleName] = {'mean':miso_posterior_mean, 'ci_low':ci_low, 'ci_high':ci_high, 
                                                'sd': miso_stdev,'meanLog2': miso_log2_mean, 'sdLog2': miso_log2_stddev, 
-                                               'assigned_reads':assigned_reads, unique_read_counts:'unique_read_counts', overlapping_read_counts:'overlapping_read_counts'}
+                                               'assigned_reads':assigned_reads, 'unique_read_counts':unique_read_counts, 'overlapping_read_counts':overlapping_read_counts}
             else:
                 sys.stderr.write("Sample {0} data was seen twice for isoform {1} in genes {2}. Something's wrong here!".format(sampleName, self.isoformID, self.event_name))
 
@@ -110,6 +110,8 @@ def parse_counts_string(n, counts_string):
                 for i,idx in enumerate(isoformIdxs):
                     if idx > 0:
                         overlappingReads[i] += nReads
+        #print uniqueReads
+        #print overlappingReads
         return uniqueReads, overlappingReads
 
 
@@ -232,7 +234,7 @@ def summarizeGeneMisoFiles_worker(args):
         bundling up the gene and isoform results for passing back to the result list. Probably not the optimal way of doing this.
         '''
         geneSummary[geneName] = {'geneName':geneName, 'chrom':chrom, 'strand':strand, 'start':most_start, 'end':most_end, 'sampleName':sampleName, 'reads':totalAssignedReads}
-        isoformSummary[geneName] = (transcriptIDs, isoforms, geneName, chrom, strand, mRNA_starts, mRNA_ends, sampleName, miso_means, miso_sds, miso_mean_log2, miso_sds_log2, miso_ci_high, miso_ci_low, assigned_counts_reads,unique_read_counts, overlapping_read_counts)
+        isoformSummary[geneName] = (transcriptIDs, isoforms, geneName, chrom, strand, mRNA_starts, mRNA_ends, sampleName, miso_means, miso_sds, miso_mean_log2, miso_sds_log2, miso_ci_high, miso_ci_low, assigned_counts_reads, unique_read_counts, overlapping_read_counts)
         
     
     res = (sampleName, geneSummary, isoformSummary)  

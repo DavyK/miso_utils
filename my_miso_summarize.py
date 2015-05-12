@@ -371,7 +371,7 @@ def main():
     
     try:
         level = sys.argv[4]
-    except ValueError:
+    except IndexError:
         sys.stderr.write('No event level provided - assuming isoforms')
         level = 'isoforms'
     if level != 'isoforms':

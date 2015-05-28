@@ -46,7 +46,7 @@ class misoIsoform():
         The idea here is to have an object represent each unique event,
         with the sampleData attribute holding the PSIs, counts, and other sample level info
         '''
-        def __init__(self, event_name, transcriptID, isoformID, chrom, strand, mRNA_start, mRNA_end):
+        def __init__(self, event_name, transcriptID, isoformID, chrom, strand, mRNA_start, mRNA_end, iso_len):
             self.event_name = event_name
             self.isoformID = isoformID
             self.transcriptID = transcriptID
@@ -54,14 +54,19 @@ class misoIsoform():
             self.strand = strand
             self.mRNA_start = mRNA_start
             self.mRNA_end = mRNA_end
+            self.iso_len = iso_len
             self.sampleData = {}
         
-        def addSampleData(self,sampleName, miso_posterior_mean, miso_stdev, miso_log2_mean, miso_log2_stddev, ci_low, ci_high,assigned_reads,unique_read_counts, overlapping_read_counts):
+        def addSampleData(self, sampleName, miso_posterior_mean, miso_stdev, 
+                          miso_log2_mean, miso_log2_stddev, ci_low, ci_high, 
+                          assigned_reads, unique_read_counts, overlapping_read_counts):
+            
             samplesAlreadySeen = set(self.sampleData.keys())
             if sampleName not in samplesAlreadySeen:
                 self.sampleData[sampleName] = {'mean':miso_posterior_mean, 'ci_low':ci_low, 'ci_high':ci_high, 
                                                'sd': miso_stdev,'meanLog2': miso_log2_mean, 'sdLog2': miso_log2_stddev, 
-                                               'assigned_reads':assigned_reads, 'unique_read_counts':unique_read_counts, 'overlapping_read_counts':overlapping_read_counts}
+                                               'assigned_reads':assigned_reads, 'unique_read_counts':unique_read_counts,
+                                               'overlapping_read_counts':overlapping_read_counts}
             else:
                 sys.stderr.write("Sample {0} data was seen twice for isoform {1} in genes {2}. Something's wrong here!".format(sampleName, self.isoformID, self.event_name))
 
@@ -130,25 +135,45 @@ def parse_miso_line(line):
         strFields[entries[0]] = entries[1]
  
     isoforms = ast.literal_eval(strFields['isoforms'])
-    
+        
     '''
     Isoforms are of the form :
     'exon:ENST00000410086:1_exon:ENST00000410086:2_exon:ENST00000410086:3_exon:ENST00000410086:4_exon:ENST00000410086:5'
+    splicing exon events are in the form of
+    chr1:xxxxxx-xxxxx@+.A_chr1:xxxxxx-xxxxx@+.B need the whole string, so don't split.
     '''
+    
     if EVENT_LEVEL == 'isoforms':
+        '''
+        #assuming that the transcript IDs are always the same across of the length of the isoforms (maybe not for novel stuff), 
+        and that each TxID is unique for each isoform
+        '''
         transcriptIDs = [i.rsplit(':')[1] for i in isoforms]
-    else:
-        transcriptIDs = isoforms 
+    else:    
+        transcriptIDs = isoforms
+    
+    
     '''
-    #assuming that the transcript IDs are always the same across of the length of the isoforms (maybe not for novel stuff), 
-    and that each TxID is unique for each isoform
+    to calculate the effective length of each isoform, iterate through the isoforms list, splitting it out into it's exon, numbers
     '''
+       
+    tmp_exon_lens = ast.literal_eval(strFields['exon_lens'])
+    
+    exon_lens = {exon[0]:exon[1] for exon in tmp_exon_lens}
+    
+    isoform_lens = {}
+    
+    for iso in isoforms:
+        iso_makeup = iso.rsplit('_')
+        sum_length = sum([exon_lens[i] for i in iso_makeup])
+        isoform_lens[iso] = sum_length
     
     chrom = strFields['chrom']
     strand = strFields['strand']
     mRNA_starts = strFields['mRNA_starts'].rsplit(',')
     mRNA_ends = strFields['mRNA_ends'].rsplit(',')
     assigned_counts = strFields['assigned_counts'].rsplit(',')
+
     
     '''
     assigned_counts is sometimes shorter than isoforms - 
@@ -171,7 +196,7 @@ def parse_miso_line(line):
     #captures the 0 of 1:0
     assigned_counts_reads = [int(i.rsplit(':')[1]) for i in assigned_counts]
     
-    parsed_line = (transcriptIDs, isoforms, 
+    parsed_line = (transcriptIDs, isoforms, isoform_lens, \
                    assigned_counts_reads, unique_read_counts, overlapping_read_counts,
                    chrom, strand, mRNA_starts, mRNA_ends )
     
@@ -197,7 +222,7 @@ def summarizeGeneMisoFiles_worker(args):
         
         misoFile = open(filename, 'r')
         
-        transcriptIDs, isoforms,\
+        transcriptIDs, isoforms, isoform_lens, \
         assigned_counts_reads, unique_read_counts, overlapping_read_counts, \
         chrom, strand, mRNA_starts, mRNA_ends = parse_miso_line(misoFile.next())
         
@@ -218,13 +243,15 @@ def summarizeGeneMisoFiles_worker(args):
         miso_sds = np.std(psis, axis=0)
         miso_ci_low = np.percentile(psis, axis=0, q=2.5)
         miso_ci_high = np.percentile(psis, axis=0, q=97.5)
+        
         log2_Psis = np.log2(psis)
-        miso_mean_log2 = np.mean(log2_Psis, axis=0)
+        
         '''
         using masked array here to account for the fact that some means are 0, and the log2 of 0 is -Inf, 
         and calculating std for arrays with -Inf throws an error.
         '''
         masked_log2_Psis = np.ma.array(log2_Psis, mask=np.isinf(log2_Psis))
+        miso_mean_log2 = np.mean(masked_log2_Psis, axis=0)
         miso_sds_log2 = np.std(masked_log2_Psis, axis=0)
         
         totalAssignedReads = sum([int(i) for i in assigned_counts_reads])
@@ -238,8 +265,27 @@ def summarizeGeneMisoFiles_worker(args):
         '''
         bundling up the gene and isoform results for passing back to the result list. Probably not the optimal way of doing this.
         '''
-        geneSummary[geneName] = {'geneName':geneName, 'chrom':chrom, 'strand':strand, 'start':most_start, 'end':most_end, 'sampleName':sampleName, 'reads':totalAssignedReads}
-        isoformSummary[geneName] = (transcriptIDs, isoforms, geneName, chrom, strand, mRNA_starts, mRNA_ends, sampleName, miso_means, miso_sds, miso_mean_log2, miso_sds_log2, miso_ci_high, miso_ci_low, assigned_counts_reads, unique_read_counts, overlapping_read_counts)
+        geneSummary[geneName] = {
+                                 'geneName':geneName,
+                                 'chrom':chrom,
+                                 'strand':strand,
+                                 'start':most_start,
+                                 'end':most_end,
+                                 'sampleName':sampleName,
+                                 'reads':totalAssignedReads      
+        }
+        
+        isoformSummary[geneName] = (
+                                    transcriptIDs, isoforms,
+                                    geneName, chrom,
+                                    strand, mRNA_starts,
+                                    mRNA_ends, isoform_lens,
+                                    sampleName, miso_means,
+                                    miso_sds, miso_mean_log2,
+                                    miso_sds_log2, miso_ci_high,
+                                    miso_ci_low, assigned_counts_reads,
+                                    unique_read_counts, overlapping_read_counts
+        )
         
     
     res = (sampleName, geneSummary, isoformSummary)  
@@ -255,13 +301,32 @@ def combineMappedResults(result_List):
             sampleGeneSummary.setdefault(data['geneName'], misoGene(data['geneName'], data['chrom'], data['strand'], data['start'], data['end'])\
                                ).addSampleData(data['sampleName'], data['reads'])
 
-            transcriptIDs, isoforms, geneName, chrom, strand, mRNA_starts, mRNA_ends, \
-                sampleName, miso_means, miso_sds, miso_mean_log2, miso_sds_log2, miso_ci_high, miso_ci_low, assigned_counts_reads, unique_read_counts, overlapping_read_counts = isoformSummary[gene]
+            transcriptIDs, isoforms, geneName, chrom, strand, mRNA_starts, mRNA_ends, isoform_lens, \
+                sampleName, miso_means, miso_sds, miso_mean_log2, miso_sds_log2, miso_ci_high, miso_ci_low, \
+                assigned_counts_reads, unique_read_counts, overlapping_read_counts = isoformSummary[gene]
                  
             for i, iso in enumerate(isoforms):
                 thisEventName = '{0}|{1}'.format(geneName, iso)
-                sampleIsoformSummary.setdefault(thisEventName, misoIsoform(geneName, transcriptIDs[i], iso, chrom, strand, mRNA_starts[i], mRNA_ends[i])\
-                                          ).addSampleData(sampleName, miso_means[i], miso_sds[i],miso_mean_log2[i], miso_sds_log2[i], miso_ci_low[i], miso_ci_high[i], assigned_counts_reads[i], unique_read_counts[i], overlapping_read_counts[i])
+                
+                newMisoIsoform = misoIsoform(
+                                             geneName, 
+                                             transcriptIDs[i], 
+                                             iso,
+                                             chrom,
+                                             strand, 
+                                             mRNA_starts[i],
+                                             mRNA_ends[i],
+                                             isoform_lens[iso]
+                )
+                
+                sampleIsoformSummary.setdefault(thisEventName, newMisoIsoform).addSampleData(
+                                                                             sampleName, miso_means[i], miso_sds[i], 
+                                                                             miso_mean_log2[i], miso_sds_log2[i], 
+                                                                             miso_ci_low[i], miso_ci_high[i], 
+                                                                             assigned_counts_reads[i], 
+                                                                             unique_read_counts[i], 
+                                                                             overlapping_read_counts[i]
+                                                                             )
                                           
     return (sampleGeneSummary, sampleIsoformSummary)
                                           
@@ -330,9 +395,9 @@ def outputIsoformMetaInfo(filePrefix, isoObj):
     outputFileName = filePrefix + '_isoformMetaInfo.txt'
     sys.stdout.write('writing isoform meta info to file {0}\n'.format(outputFileName))
     outputFile = open(outputFileName, 'w')
-    outputFile.write('transcriptID\tisoformID\tGENE\tCHROM\tSTRAND\tSTART\tEND\n')
+    outputFile.write('transcriptID\tisoformID\tGENE\tCHROM\tSTRAND\tSTART\tEND\tISO_LEN\n')
     for iso, obj in isoObj.iteritems():
-        output = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\n'.format(obj.transcriptID, obj.isoformID, obj.event_name, obj.chrom, obj.strand, obj.mRNA_start, obj.mRNA_end)
+        output = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}\n'.format(obj.transcriptID, obj.isoformID, obj.event_name, obj.chrom, obj.strand, obj.mRNA_start, obj.mRNA_end, obj.iso_len)
         outputFile.write(output)
     outputFile.close()
         
@@ -357,22 +422,22 @@ def main():
         outputFilePrefix = sys.argv[2]
         
     except IndexError:
-        sys.stderr.write('No output file name specified - using "misosummary_allSamples_<type>matrix.txt')
+        sys.stderr.write('No output file name specified - using "misosummary_allSamples_<type>matrix.txt\n')
         outputFilePrefix = 'misosummary_allSamples'
     
     try:
         nCpus = int(sys.argv[3])
     except IndexError:
-        sys.stderr.write('No nCPUs given - assuming 6 (4 workers, 1 listener, 1 main)')
+        sys.stderr.write('No nCPUs given - assuming 6 (4 workers, 1 listener, 1 main)\n')
         nCpus = 6
     except ValueError:
-        sys.stderr.write('nCPUs must be an integer - assuming 6 (4 workers, 1 listener, 1 main)')
+        sys.stderr.write('nCPUs must be an integer - assuming 6 (4 workers, 1 listener, 1 main)\n')
         nCpus = 6
     
     try:
         level = sys.argv[4]
     except IndexError:
-        sys.stderr.write('No event level provided - assuming isoforms')
+        sys.stderr.write('No event level provided - assuming isoforms\n')
         level = 'isoforms'
     if level != 'isoforms':
         level = 'exons'

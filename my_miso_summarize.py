@@ -397,11 +397,18 @@ def slice_it(li, n):
         start = stop                                         
        
 def main():
+    
+    help_message = '''
+                    HELP:
+                    run as:
+                    python my_miso_summarise.py [locations_file_name] [output_file_prefix] [nCPUs] [event-level (must be either isoform or exon - defaults to isoform)]
+                    '''
     try:
         miso_file_locations_file = sys.argv[1]
         
     except IndexError:
         sys.stderr.write('No location file specified')
+        sys.stderr.write(help_message)
         sys.exit()
         
     try:
@@ -409,24 +416,30 @@ def main():
         
     except IndexError:
         sys.stderr.write('No output file name specified - using "misosummary_allSamples_<type>matrix.txt\n')
+        sys.stderr.write(help_message)
         outputFilePrefix = 'misosummary_allSamples'
     
     try:
         nCpus = int(sys.argv[3])
     except IndexError:
         sys.stderr.write('No nCPUs given - assuming 6 (4 workers, 1 listener, 1 main)\n')
+        sys.stderr.write(help_message)
         nCpus = 6
     except ValueError:
         sys.stderr.write('nCPUs must be an integer - assuming 6 (4 workers, 1 listener, 1 main)\n')
+        sys.stderr.write(help_message)
         nCpus = 6
     
     try:
         level = sys.argv[4]
     except IndexError:
         sys.stderr.write('No event level provided - assuming isoforms\n')
+        sys.stderr.write(help_message)
         level = 'isoforms'
+        
     if level != 'isoforms':
         level = 'exons'
+        
     global EVENT_LEVEL
     EVENT_LEVEL = level
     

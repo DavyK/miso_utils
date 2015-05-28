@@ -71,31 +71,16 @@ class misoIsoform():
                 sys.stderr.write("Sample {0} data was seen twice for isoform {1} in genes {2}. Something's wrong here!".format(sampleName, self.isoformID, self.event_name))
 
 
-def findMisoFiles(inputDir):
-    '''
-    must use a quoted string for the inputDir on the command line. 
-    glob expansion happens in python and is much faster than looping through the directory structure
-    '''
-    files = glob.glob(inputDir)
+def findMisoFiles(locations_file):
     
     sample_gene_miso_files = {}
-     
-    '''
-    this is a real hack, will not work if sample name scheme changes
-    A better strategy would be to have an input file with two fields:
-    SampleName \t Path/to/dir/with/miso/files/
-    
-    Then use glob.glob() on each sample path to get all miso files for each sample. 
-    '''
-    
-    pattern = re.compile("([A-Z]{4}_RNA_[A-Z_]+_\d+)")  
-    
-    for f in files:
-        geneName = os.path.splitext(os.path.basename(f))[0]
-        sampleName = pattern.search(f).group(0)
-        sample_gene_miso_files.setdefault(sampleName, []).append(f)
+    total_file_count = 0
+    locations_file = open(locations_file, 'r')
+    for line in locations_file:
+        sample_name, sample_glob = line.rstrip().rsplit()
+        total_file_count += len(sample_gene_miso_files[sample_name])
 
-    sys.stdout.write('Found {0} miso files for {1} samples\n'.format(len(files),len(sample_gene_miso_files)))
+    sys.stdout.write('Found {0} miso files for {1} samples\n'.format(total_file_count,len(sample_gene_miso_files)))
 
     return sample_gene_miso_files
 
@@ -412,10 +397,10 @@ def slice_it(li, n):
        
 def main():
     try:
-        inputDir = sys.argv[1]
+        miso_file_locations_file = sys.argv[1]
         
     except IndexError:
-        sys.stderr.write('No input directory specified')
+        sys.stderr.write('No location file specified')
         sys.exit()
         
     try:
@@ -445,7 +430,7 @@ def main():
     EVENT_LEVEL = level
     
         
-    sample_gene_miso_files = findMisoFiles(inputDir)
+    sample_gene_miso_files = findMisoFiles(miso_file_locations_file)
     sampleList = sample_gene_miso_files.keys()
     #must use Manager queue here, or will not work
     pool = mp.Pool(nCpus)

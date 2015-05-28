@@ -78,6 +78,7 @@ def findMisoFiles(locations_file):
     locations_file = open(locations_file, 'r')
     for line in locations_file:
         sample_name, sample_glob = line.rstrip().rsplit()
+        sample_gene_miso_files[sample_name] = glob.glob(sample_glob)
         total_file_count += len(sample_gene_miso_files[sample_name])
 
     sys.stdout.write('Found {0} miso files for {1} samples\n'.format(total_file_count,len(sample_gene_miso_files)))

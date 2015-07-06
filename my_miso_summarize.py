@@ -334,6 +334,10 @@ def outputMatrix(filePrefix, isoObj, sampleList, dataType):
         filePostFix = '_uniqueReadsMatrix.tsv'
     if dataType == 'overlapping_read_counts':
         filePostFix = '_nonUniqueReadsMatrix.tsv'
+    if dataType == 'ci_low':
+        filePostFix = '_lowerCImeanPsiMatrix.tsv'
+    if dataType == 'ci_high':
+        filePostFix = '_upperCImeanPsiMatrix.tsv'
     
     outputFileName = filePrefix + filePostFix
     sys.stdout.write('writing {1} matrix to file {0}\n'.format(outputFileName, dataType))
@@ -480,6 +484,8 @@ def main():
     sys.stdout.write('Results combined. Time taken to combine: {0}\n'.format(finish))
      
     outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'mean')
+    outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'ci_low')
+    outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'ci_high')
     outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'sd')
     outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'sdLog2')
     outputMatrix(outputFilePrefix, sampleIsoformSummary, sampleList, 'meanLog2')
